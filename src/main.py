@@ -3,6 +3,72 @@ import geopandas as gpd
 import pandas as pd
 
 
+def read_shark_data(path: str) -> gpd.GeoDataFrame:
+    df = pd.read_excel(path)
+
+    columns = [
+        "Latitude",
+        "Longitude",
+        "Injury.severity",
+        "Victim.gender",
+        "Incident.month",
+        "Incident.year",
+        "Shark.common.name",
+        "Victim.activity",
+        "Provoked/unprovoked",
+    ]
+
+    df = df[columns].copy()
+
+    df = df.rename(
+        columns={
+            "Latitude": "lat",
+            "Longitude": "long",
+            "Victim.gender": "sex",
+            "Shark.common.name": "species",
+            "Victim.activity": "activity",
+            "Provoked/unprovoked": "provoked",
+        }
+    )
+
+    df["date"] = pd.to_datetime(
+        df[["Incident.year", "Incident.month"]]
+        .rename(columns={"Incident.year": "year", "Incident.month": "month"})
+        .assign(day=1),
+        errors="coerce",
+    )
+
+    df["is_fatal"] = df["Injury.severity"].apply(
+        lambda x: 1 if str(x).lower() == "fatal" else 0
+    )
+
+    df = df.dropna(subset=["lat", "long"])
+
+    df = df[df["Incident.year"] >= 2015]
+
+    gdf = gpd.GeoDataFrame(
+        df, geometry=gpd.points_from_xy(df.long, df.lat), crs="EPSG:4326"
+    )
+
+    gdf = gpd.GeoDataFrame(
+        gdf[
+            [
+                "geometry",
+                "lat",
+                "long",
+                "is_fatal",
+                "sex",
+                "date",
+                "species",
+                "activity",
+                "provoked",
+            ]
+        ].copy()
+    )
+
+    return gdf
+
+
 def read_croc_data(path: str) -> gpd.GeoDataFrame:
     df = pd.read_csv(path)
 
@@ -12,8 +78,24 @@ def read_croc_data(path: str) -> gpd.GeoDataFrame:
         df, geometry=gpd.points_from_xy(df.long, df.lat), crs="EPSG:4326"
     )
 
+    gdf["species"] = "crocodile"
+    gdf["activity"] = None
+    gdf["provoked"] = None
+
     gdf = gpd.GeoDataFrame(
-        gdf[["geometry", "lat", "long", "is_fatal", "sex", "date"]].copy()
+        gdf[
+            [
+                "geometry",
+                "lat",
+                "long",
+                "is_fatal",
+                "sex",
+                "date",
+                "species",
+                "activity",
+                "provoked",
+            ]
+        ].copy()
     )
 
     return gdf
@@ -33,10 +115,8 @@ def create_map(
         name="Crocodile Attacks: Non-fatal"
     )
 
-    fg_shark_fatal = folium.FeatureGroup(name="Shark Attacks: Fatal (NIE MA)")
-    fg_shark_non_fatal = folium.FeatureGroup(
-        name="Shark Attacks: Non-fatal (NIE MA)"
-    )
+    fg_shark_fatal = folium.FeatureGroup(name="Shark Attacks: Fatal")
+    fg_shark_non_fatal = folium.FeatureGroup(name="Shark Attacks: Non-fatal")
 
     fg_population = folium.FeatureGroup(name="Population Density (NIE MA)")
 
@@ -47,7 +127,9 @@ def create_map(
         popup_info = ""
         for col in gdf.columns:
             if col != "geometry":
-                popup_info += f"<b>{col}:</b> {row[col]}<br>"
+                value = row[col]
+                if pd.notna(value) and value != "" and value is not None:
+                    popup_info += f"<b>{col}:</b> {value}<br>"
 
         is_shark = "shark" in str(row.get("species", "")).lower()
         icon_path = shark_icon_path if is_shark else croc_icon_path
@@ -99,5 +181,12 @@ def create_map(
 
 if __name__ == "__main__":
     data_croc = read_croc_data("data/croc_attacks.csv")
+    data_shark = read_shark_data("data/shark_attacks.xlsx")
 
-    create_map(data_croc)
+    data_combined = gpd.GeoDataFrame(
+        pd.concat([data_croc, data_shark], ignore_index=True),
+        geometry="geometry",
+        crs="EPSG:4326",
+    )
+
+    create_map(data_combined)

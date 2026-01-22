@@ -1,12 +1,14 @@
 branca==0.8.2
 certifi==2026.1.4
 charset-normalizer==3.4.4
+et_xmlfile==2.0.0
 folium==0.20.0
 geopandas==1.1.2
 idna==3.11
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 numpy==2.4.1
+openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.0
 pyogrio==0.12.1
